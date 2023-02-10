@@ -1,4 +1,8 @@
 use bitfield_struct::bitfield;
+use hidapi::HidApi;
+use std::sync::mpsc::Sender;
+use std::result::Result;
+use std::thread;
 
 /*
 outputs: 13bytes
@@ -18,7 +22,34 @@ byte12: padding?
 */
 
 
-pub const ID: (u16, u16) = (0x06A3, 0x0D06);
+const ID: (u16, u16) = (0x06A3, 0x0D06);
+
+pub struct MultiPanel {
+}
+
+impl MultiPanel {
+    pub fn receive(api: &HidApi, tx: Sender<crate::InputData>) -> Result<&'static str, &'static str> {
+        if let Ok(device) = api.open(ID.0, ID.1) {
+            thread::spawn(move || {
+                let mut input_buffer = [0u8; 4];
+                loop {
+                    match device.read(&mut input_buffer) {
+                        Ok(_) => {
+                            tx.send(crate::InputData::MultiInputData(
+                                MultiPanelInputs::from(u32::from_le_bytes(input_buffer[0..4].try_into().expect("incorrect input length")))
+                            )).expect("could not send");
+                        },
+                        Err(_e) => ()
+                    }
+                }
+            });
+            return Ok("super")
+        }
+        else {
+            return Err("Could not open device")
+        }
+    }
+}
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]

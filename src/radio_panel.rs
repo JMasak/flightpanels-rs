@@ -1,4 +1,9 @@
 use bitfield_struct::bitfield;
+use hidapi::HidApi;
+use std::sync::mpsc::{Sender, Receiver};
+use std::result::Result;
+use std::thread;
+use std::time::Duration;
 
 /*
 outputs: 23bytes
@@ -12,7 +17,48 @@ bytes 21-22: padding?
 
 
 
-pub const ID: (u16, u16) = (0x06A3, 0x0D05);
+const ID: (u16, u16) = (0x06A3, 0x0D05);
+
+pub struct RadioPanel {
+}
+
+impl RadioPanel {
+    pub fn receive(api: &HidApi, tx: Sender<crate::InputData>, rx: Receiver<OutputCommands>) -> Result<&'static str, &'static str> {
+        if let Ok(device) = api.open(ID.0, ID.1) {
+            let mut frequencies  = RadioPanelOutputs{
+                upper_active_display: [0xff; 5],
+                upper_standby_display: [0xff; 5],
+                lower_active_display: [0xff; 5],
+                lower_standby_display: [0xff; 5]
+            };
+            thread::spawn(move || {
+                let mut input_buffer = [0u8; 4];
+                loop {
+                    match device.read_timeout(&mut input_buffer, 250) {
+                        Ok(_) => {
+                            tx.send(crate::InputData::RadioInputData(
+                                RadioPanelInputs::from(u32::from_le_bytes(input_buffer[0..4].try_into().expect("incorrect input length")))
+                            )).expect("could not send");
+                        },
+                        Err(_e) => ()
+                    }
+                    if let Ok(command) = rx.recv_timeout(Duration::from_millis(10)) {
+                        match command {
+                            OutputCommands::SetUpperActiveFrequency(freq) => frequencies.set_display(RadioDisplay::UpperActive, freq).expect("could not set frequency"),
+                            OutputCommands::SetUpperStandbyFrequency(freq) => frequencies.set_display(RadioDisplay::UpperStandby, freq).expect("could not set frequency"),
+                            OutputCommands::SetLowerActiveFrequency(freq) => frequencies.set_display(RadioDisplay::LowerActive, freq).expect("could not set frequency"),
+                            OutputCommands::SetLowerStandbyFrequency(freq) => frequencies.set_display(RadioDisplay::LowerStandby, freq).expect("could not set frequency"),
+                        }
+                    }
+                }
+            });
+            return Ok("super")
+        }
+        else {
+            return Err("Could not open device")
+        }
+    }
+}
 
 #[bitfield(u32)]
 #[derive(PartialEq, Eq)]
@@ -62,7 +108,7 @@ impl RadioPanelOutputs {
         data
     }
 
-    pub fn set_display(mut self, display: RadioDisplay, value: f32) -> Result<(), &'static str>{
+    pub fn set_display(&mut self, display: RadioDisplay, value: f32) -> Result<(), &'static str>{
         let mut display_data: [u8; 5] = [0xff; 5];
         if value < 0.0 {
             return Err("Displays cannot show negative values");
@@ -147,6 +193,13 @@ pub enum ComSelection {
     ADF = 16,
     DME = 32,
     XPDR = 64
+}
+
+pub enum OutputCommands {
+    SetUpperActiveFrequency(f32),
+    SetUpperStandbyFrequency(f32),
+    SetLowerActiveFrequency(f32),
+    SetLowerStandbyFrequency(f32)
 }
 
 impl Into<u32> for ComSelection {
