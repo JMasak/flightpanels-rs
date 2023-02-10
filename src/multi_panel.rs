@@ -23,6 +23,8 @@ byte12: padding?
 
 
 const ID: (u16, u16) = (0x06A3, 0x0D06);
+const DASH: u8 = 0xEE;
+const BLANK: u8 = 0x0A;
 
 pub struct MultiPanel {
 }
@@ -81,6 +83,11 @@ pub struct MultiPanelOutputs {
     pub leds: MultiPanelOutputLeds,
 }
 
+pub enum MultiDisplay {
+    UpperDisplay,
+    LowerDisplay
+}
+
 impl MultiPanelOutputs {
     pub fn as_bytes(self) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::with_capacity(13);
@@ -90,6 +97,67 @@ impl MultiPanelOutputs {
         data.push(self.leds.into());
         data.push(0); // padding?
         data
+    }
+
+    pub fn set_display(&mut self, display: MultiDisplay, value: i32) -> Result<(), &'static str> {
+        let mut display_data: [u8; 5] = [0xff; 5];
+        let mut val = value;
+        let mut first_digit = true;
+        if val > 99999 || val < -9999 {
+            return Err("Value too long")
+        }
+        if val < 0 {
+            display_data[0] = DASH;
+            val *= -1;
+        }
+        else if value >= 10000 {
+            display_data[0] = (val / 10000).try_into().expect("could not convert to figure");
+            val %= 10000;
+            first_digit = false;
+        }
+        else {
+            display_data[0] = BLANK;
+        }
+        if(val >= 1000) {
+            display_data[1] = (val / 1000).try_into().expect("could not convert to figure");
+            val %= 1000;
+            first_digit = false;
+        }
+        else if !first_digit {
+            display_data[1] = 0;
+        }
+        else {
+            display_data[1] = BLANK;
+        }
+        if(val >= 100) {
+            display_data[2] = (val / 100).try_into().expect("could not convert to figure");
+            val %= 100;
+            first_digit = false;
+        }
+        else if !first_digit {
+            display_data[2] = 0;
+        }
+        else {
+            display_data[2] = BLANK;
+        }
+        if(val >= 10) {
+            display_data[3] = (val / 10).try_into().expect("could not convert to figure");
+            val %= 10;
+            first_digit = false;
+        }
+        else if !first_digit {
+            display_data[3] = 0;
+        }
+        else {
+            display_data[3] = BLANK;
+        }
+        display_data[3] = (val).try_into().expect("could not convert to figure");
+
+        match display {
+            MultiDisplay::UpperDisplay => { self.upper_display.swap_with_slice(&mut display_data); },
+            MultiDisplay::LowerDisplay => { self.lower_display.swap_with_slice(&mut display_data); }
+        }
+        Ok(())
     }
 }
 
