@@ -1,6 +1,7 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use hidapi::HidApi;
+use switch_panel::EngineSelection;
 
 mod multi_panel;
 mod radio_panel;
@@ -31,23 +32,29 @@ impl Flightpanels {
             switch_panel::SwitchPanel::receive(&api, tx.clone(), switch_rx).expect("could not create thread for switch panel");
             flight_instrument_panel::FlightInstrumentPanel::receive(&api, tx.clone(), fip_rx).expect("could not create thread for FIP");
 
+            let mut engsel: EngineSelection = EngineSelection::Invalid;
+
             loop {
                 match rx.recv() {
                     Ok(rec) => match rec {
                         InputData::MultiInputData(data) => (),//println!("{:#?}", data),
                         InputData::RadioInputData(data) => (),//println!("{:#?}", data),
-                        InputData::SwitchInputData(data) => (),//{
-                        //     match data.engine_selector() {
-                        //         switch_panel::EngineSelection::LEFT => {switch_tx.send(switch_panel::OutputCommands::SetLeftLedTo(switch_panel::LedColors::Green));},
-                        //         switch_panel::EngineSelection::RIGHT => {switch_tx.send(switch_panel::OutputCommands::SetRightLedTo(switch_panel::LedColors::Green));},
-                        //         switch_panel::EngineSelection::BOTH => {switch_tx.send(switch_panel::OutputCommands::SetUpLedTo(switch_panel::LedColors::Green));},
-                        //         switch_panel::EngineSelection::OFF => {switch_tx.send(switch_panel::OutputCommands::SetAllLedsTo(switch_panel::LedColors::Off));},
-                        //         switch_panel::EngineSelection::START => {switch_tx.send(switch_panel::OutputCommands::SetLeds((switch_panel::GearLedsStates::LEFT_GREEN | switch_panel::GearLedsStates::UP_YELLOW | switch_panel::GearLedsStates::RIGHT_RED).bits()));},
-                        //         switch_panel::EngineSelection::Invalid => ()
-                        //     }
-                        //     println!("{:#?}", data)
-                        // },
-                        InputData::FIPInputData(data) => (),//println!("{:#?}", data),
+                        InputData::SwitchInputData(data) => {
+                            if engsel != data.engine_selector()
+                            {
+                                engsel = data.engine_selector();
+                                match data.engine_selector() {
+                                    switch_panel::EngineSelection::LEFT => {switch_tx.send(switch_panel::OutputCommands::SetLeftLedTo(switch_panel::LedColors::Green));},
+                                    switch_panel::EngineSelection::RIGHT => {switch_tx.send(switch_panel::OutputCommands::SetRightLedTo(switch_panel::LedColors::Green));},
+                                    switch_panel::EngineSelection::BOTH => {switch_tx.send(switch_panel::OutputCommands::SetUpLedTo(switch_panel::LedColors::Green));},
+                                    switch_panel::EngineSelection::OFF => {switch_tx.send(switch_panel::OutputCommands::SetAllLedsTo(switch_panel::LedColors::Off));},
+                                    switch_panel::EngineSelection::START => {switch_tx.send(switch_panel::OutputCommands::SetLeds((switch_panel::GearLedsStates::LEFT_GREEN | switch_panel::GearLedsStates::UP_YELLOW | switch_panel::GearLedsStates::RIGHT_RED).bits()));},
+                                    switch_panel::EngineSelection::Invalid => ()
+                                }
+                                println!("{:#?}", data)
+                            }
+                        },
+                        InputData::FIPInputData(data) => println!("{:#?}", data),
                     },
                     Err(e) => println!("Error {}", e)
                 }
