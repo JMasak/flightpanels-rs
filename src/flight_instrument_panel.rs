@@ -11,7 +11,7 @@ impl FlightInstrumentPanel {
     pub fn receive(
         api: &HidApi,
         tx: Sender<crate::InputData>,
-        rx: Receiver<OutputCommands>,
+        _rx: Receiver<OutputCommands>,
     ) -> Result<&'static str, &'static str> {
         if let Ok(device) = api.open(ID.0, ID.1) {
             thread::spawn(move || {

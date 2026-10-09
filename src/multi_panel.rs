@@ -123,7 +123,7 @@ impl MultiPanelOutputs {
         } else {
             display_data[0] = BLANK;
         }
-        if (val >= 1000) {
+        if val >= 1000 {
             display_data[1] = (val / 1000)
                 .try_into()
                 .expect("could not convert to figure");
@@ -134,7 +134,7 @@ impl MultiPanelOutputs {
         } else {
             display_data[1] = BLANK;
         }
-        if (val >= 100) {
+        if val >= 100 {
             display_data[2] = (val / 100).try_into().expect("could not convert to figure");
             val %= 100;
             first_digit = false;
@@ -143,7 +143,7 @@ impl MultiPanelOutputs {
         } else {
             display_data[2] = BLANK;
         }
-        if (val >= 10) {
+        if val >= 10 {
             display_data[3] = (val / 10).try_into().expect("could not convert to figure");
             val %= 10;
             first_digit = false;
