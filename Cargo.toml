@@ -1,7 +1,7 @@
 [package]
 name = "flightpanels-rs"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,3 +9,4 @@ edition = "2021"
 hidapi = "2.1.2"
 bitfield-struct = "0.3.1"
 bitflags = "1.3.2"
+vjoy = "0.7.1"

@@ -1,7 +1,7 @@
 use bitfield_struct::bitfield;
 use hidapi::HidApi;
-use std::sync::mpsc::{Sender, Receiver};
 use std::result::Result;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
@@ -15,47 +15,60 @@ bytes 16-20: 5 Ziffern unteres rechtes Display (kein ASCII - Werte 0-9)
 bytes 21-22: padding?
 */
 
-
-
 const ID: (u16, u16) = (0x06A3, 0x0D05);
 
-pub struct RadioPanel {
-}
+pub struct RadioPanel {}
 
 impl RadioPanel {
-    pub fn receive(api: &HidApi, tx: Sender<crate::InputData>, rx: Receiver<OutputCommands>) -> Result<&'static str, &'static str> {
+    pub fn receive(
+        api: &HidApi,
+        tx: Sender<crate::InputData>,
+        rx: Receiver<OutputCommands>,
+    ) -> Result<&'static str, &'static str> {
         if let Ok(device) = api.open(ID.0, ID.1) {
-            let mut frequencies  = RadioPanelOutputs{
+            let mut frequencies = RadioPanelOutputs {
                 upper_active_display: [0xff; 5],
                 upper_standby_display: [0xff; 5],
                 lower_active_display: [0xff; 5],
-                lower_standby_display: [0xff; 5]
+                lower_standby_display: [0xff; 5],
             };
             thread::spawn(move || {
                 let mut input_buffer = [0u8; 4];
                 loop {
                     match device.read_timeout(&mut input_buffer, 250) {
                         Ok(_) => {
-                            tx.send(crate::InputData::RadioInputData(
-                                RadioPanelInputs::from(u32::from_le_bytes(input_buffer[0..4].try_into().expect("incorrect input length")))
-                            )).expect("could not send");
-                        },
-                        Err(_e) => ()
+                            tx.send(crate::InputData::RadioInputData(RadioPanelInputs::from(
+                                u32::from_le_bytes(
+                                    input_buffer[0..4]
+                                        .try_into()
+                                        .expect("incorrect input length"),
+                                ),
+                            )))
+                            .expect("could not send");
+                        }
+                        Err(_e) => (),
                     }
                     if let Ok(command) = rx.recv_timeout(Duration::from_millis(10)) {
                         match command {
-                            OutputCommands::SetUpperActiveFrequency(freq) => frequencies.set_display(RadioDisplay::UpperActive, freq).expect("could not set frequency"),
-                            OutputCommands::SetUpperStandbyFrequency(freq) => frequencies.set_display(RadioDisplay::UpperStandby, freq).expect("could not set frequency"),
-                            OutputCommands::SetLowerActiveFrequency(freq) => frequencies.set_display(RadioDisplay::LowerActive, freq).expect("could not set frequency"),
-                            OutputCommands::SetLowerStandbyFrequency(freq) => frequencies.set_display(RadioDisplay::LowerStandby, freq).expect("could not set frequency"),
+                            OutputCommands::SetUpperActiveFrequency(freq) => frequencies
+                                .set_display(RadioDisplay::UpperActive, freq)
+                                .expect("could not set frequency"),
+                            OutputCommands::SetUpperStandbyFrequency(freq) => frequencies
+                                .set_display(RadioDisplay::UpperStandby, freq)
+                                .expect("could not set frequency"),
+                            OutputCommands::SetLowerActiveFrequency(freq) => frequencies
+                                .set_display(RadioDisplay::LowerActive, freq)
+                                .expect("could not set frequency"),
+                            OutputCommands::SetLowerStandbyFrequency(freq) => frequencies
+                                .set_display(RadioDisplay::LowerStandby, freq)
+                                .expect("could not set frequency"),
                         }
                     }
                 }
             });
-            return Ok("super")
-        }
-        else {
-            return Err("Could not open device")
+            return Ok("super");
+        } else {
+            return Err("Could not open device");
         }
     }
 }
@@ -64,28 +77,28 @@ impl RadioPanel {
 #[derive(PartialEq, Eq)]
 pub struct RadioPanelInputs {
     #[bits(7)]
-    selector1: ComSelection,
+    pub selector1: ComSelection,
     #[bits(7)]
-    selector2: ComSelection,
-    swap1: bool,
-    swap2: bool,
-    fine_inc1: bool,
-    fine_dec1: bool,
-    coarse_inc1: bool,
-    coarse_dec1: bool,
-    fine_inc2: bool,
-    fine_dec2: bool,
-    coarse_inc2: bool,
-    coarse_dec2: bool,
+    pub selector2: ComSelection,
+    pub swap1: bool,
+    pub swap2: bool,
+    pub fine_inc1: bool,
+    pub fine_dec1: bool,
+    pub coarse_inc1: bool,
+    pub coarse_dec1: bool,
+    pub fine_inc2: bool,
+    pub fine_dec2: bool,
+    pub coarse_inc2: bool,
+    pub coarse_dec2: bool,
     #[bits(8)]
-    _pad: u32
+    _pad: u32,
 }
 
 pub enum RadioDisplay {
     UpperActive,
     UpperStandby,
     LowerActive,
-    LowerStandby
+    LowerStandby,
 }
 
 pub struct RadioPanelOutputs {
@@ -98,7 +111,7 @@ pub struct RadioPanelOutputs {
 impl RadioPanelOutputs {
     pub fn as_bytes(self) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::with_capacity(23);
-        data.push(0);   // hid report no.
+        data.push(0); // hid report no.
         data.extend_from_slice(&self.upper_active_display[0..]);
         data.extend_from_slice(&self.upper_standby_display[0..]);
         data.extend_from_slice(&self.lower_active_display[0..]);
@@ -108,36 +121,48 @@ impl RadioPanelOutputs {
         data
     }
 
-    pub fn set_display(&mut self, display: RadioDisplay, value: f32) -> Result<(), &'static str>{
+    pub fn set_display(&mut self, display: RadioDisplay, value: f32) -> Result<(), &'static str> {
         let mut display_data: [u8; 5] = [0xff; 5];
         if value < 0.0 {
             return Err("Displays cannot show negative values");
         }
         if value > 99999.0 {
-            return Err("Displays cannot show more than 5 figures")
+            return Err("Displays cannot show more than 5 figures");
         }
         let mut first_digit = true;
         let shift: u8;
         let mut tmp_value: u32;
-        if value >= 10000.0 { shift = 0; tmp_value = value as u32;}
-        else if value >= 1000.0 { shift = 1; tmp_value = (value * 10.0) as u32;}
-        else { shift = 2; tmp_value = (value * 100.0) as u32;}
-        let mut figure: u8 = (tmp_value / 10000).try_into().expect("could not convert to figure");
+        if value >= 10000.0 {
+            shift = 0;
+            tmp_value = value as u32;
+        } else if value >= 1000.0 {
+            shift = 1;
+            tmp_value = (value * 10.0) as u32;
+        } else {
+            shift = 2;
+            tmp_value = (value * 100.0) as u32;
+        }
+        let mut figure: u8 = (tmp_value / 10000)
+            .try_into()
+            .expect("could not convert to figure");
         if figure > 0 {
             display_data[0] = figure;
             first_digit = false;
             tmp_value %= 10000;
         }
-        figure = (tmp_value / 1000).try_into().expect("could not convert to figure");
+        figure = (tmp_value / 1000)
+            .try_into()
+            .expect("could not convert to figure");
         if figure > 0 {
             display_data[1] = figure;
             first_digit = false;
             tmp_value %= 1000;
-        }
-        else if !first_digit {
+        } else if !first_digit {
             display_data[1] = 0;
         }
-        figure = (tmp_value / 100).try_into().expect("could not convert to figure");
+        figure = (tmp_value / 100)
+            .try_into()
+            .expect("could not convert to figure");
         if figure > 0 {
             if shift == 2 {
                 figure += 0xD0;
@@ -145,16 +170,16 @@ impl RadioPanelOutputs {
             display_data[2] = figure;
             first_digit = false;
             tmp_value %= 100;
-        }
-        else {
+        } else {
             if shift == 2 {
                 display_data[2] = 0xD0;
-            }
-            else if !first_digit {
+            } else if !first_digit {
                 display_data[2] = 0;
             }
         }
-        figure = (tmp_value / 10).try_into().expect("could not convert to figure");
+        figure = (tmp_value / 10)
+            .try_into()
+            .expect("could not convert to figure");
         if figure > 0 {
             if shift == 1 {
                 figure += 0xD0;
@@ -162,21 +187,29 @@ impl RadioPanelOutputs {
             display_data[3] = figure;
             first_digit = false;
             tmp_value %= 10;
-        }
-        else {
+        } else {
             if shift == 1 {
                 display_data[3] = 0xD0;
-            }
-            else if !first_digit {
+            } else if !first_digit {
                 display_data[3] = 0;
             }
         }
-        display_data[4] = (tmp_value % 10).try_into().expect("could not convert to figure");
+        display_data[4] = (tmp_value % 10)
+            .try_into()
+            .expect("could not convert to figure");
         match display {
-            RadioDisplay::UpperActive => { self.upper_active_display.swap_with_slice(&mut display_data) },
-            RadioDisplay::UpperStandby => { self.upper_standby_display.swap_with_slice(&mut display_data) },
-            RadioDisplay::LowerActive => { self.lower_active_display.swap_with_slice(&mut display_data) },
-            RadioDisplay::LowerStandby => { self.lower_standby_display.swap_with_slice(&mut display_data) }
+            RadioDisplay::UpperActive => {
+                self.upper_active_display.swap_with_slice(&mut display_data)
+            }
+            RadioDisplay::UpperStandby => self
+                .upper_standby_display
+                .swap_with_slice(&mut display_data),
+            RadioDisplay::LowerActive => {
+                self.lower_active_display.swap_with_slice(&mut display_data)
+            }
+            RadioDisplay::LowerStandby => self
+                .lower_standby_display
+                .swap_with_slice(&mut display_data),
         }
         Ok(())
     }
@@ -192,14 +225,14 @@ pub enum ComSelection {
     NAV2 = 8,
     ADF = 16,
     DME = 32,
-    XPDR = 64
+    XPDR = 64,
 }
 
 pub enum OutputCommands {
     SetUpperActiveFrequency(f32),
     SetUpperStandbyFrequency(f32),
     SetLowerActiveFrequency(f32),
-    SetLowerStandbyFrequency(f32)
+    SetLowerStandbyFrequency(f32),
 }
 
 impl Into<u32> for ComSelection {
@@ -218,7 +251,7 @@ impl From<u32> for ComSelection {
             8..=15 => ComSelection::NAV2,
             16..=31 => ComSelection::ADF,
             32..=63 => ComSelection::DME,
-            64..=u32::MAX => ComSelection::XPDR
+            64..=u32::MAX => ComSelection::XPDR,
         }
     }
 }
